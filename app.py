@@ -8,6 +8,7 @@ from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 
 # --- CONFIGURATION GEMINI ---
+load_dotenv()
 gemini_api_key = os.getenv("GEMINI_API_KEY")
 configure(api_key=gemini_api_key)
 gemini = GenerativeModel("models/gemini-2.0-flash")
@@ -25,6 +26,14 @@ doc_vectorstore = Chroma(
     embedding_function=HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 )
 doc_retriever = doc_vectorstore.as_retriever()
+
+# --- EMOJIS POUR INTENTIONS ---
+EMOJI_INTENT = {
+    "web": "🌐",
+    "doc": "📄",
+    "action": "📝",
+    "none": "❓"
+}
 
 # --- FONCTIONS D’AGENTS & ROUTEUR ---
 def detect_intention(user_input):
@@ -122,39 +131,39 @@ def main_router(user_input):
     else:
         return "Désolé, je n'ai pas compris votre demande. Pouvez-vous reformuler ?", "none"
 
-# --- EMOJIS POUR INTENTIONS ---
-EMOJI_INTENT = {
-    "web": "🌐",
-    "doc": "📄",
-    "action": "📝",
-    "none": "❓"
-}
+def clear_history():
+    st.session_state.history = []
 
-# --- STREAMLIT UI ---
+# --- CONFIGURATION UI ---
 st.set_page_config(page_title="🤖 Assistant SupdeVinci")
 st.title("Assistant intelligent SupdeVinci")
 
-# Initialisation historique conversation dans la session
+# --- SIDEBAR ---
+with st.sidebar:
+    st.title("🔧 Options")
+    if st.button("🗑️ Supprimer l'historique"):
+        clear_history()
+        st.success("Historique supprimé !")
+
+# --- SESSION STATE INIT ---
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# Formulaire pour saisie + bouton "Envoyer" avec reset auto
-with st.form(key="input_form", clear_on_submit=True):
-    user_input = st.text_input("Posez votre question sur SupdeVinci...")
-    submit_button = st.form_submit_button("Envoyer")
+# --- INPUT VIA st.chat_input ---
+user_input = st.chat_input("Posez votre question sur SupdeVinci...")
 
-if submit_button and user_input:
+if user_input:
     with st.spinner("Analyse en cours..."):
         answer, intent = main_router(user_input)
 
-    # Ajouter à l'historique : question + réponse + intention
+    # Ajout à l'historique
     st.session_state.history.append({
         "question": user_input,
         "answer": answer,
         "intent": intent
     })
 
-# Affichage de l'historique sous forme de chat stylé
+# --- AFFICHAGE DE L'HISTORIQUE ---
 for entry in reversed(st.session_state.history):
     st.markdown(
         f"""
