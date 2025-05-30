@@ -1,0 +1,12 @@
+streamlit
+google-cloud-aiplatform
+requests
+beautifulsoup4
+langchain 
+PyPDF2
+langchain-community
+langchain_hugginface
+chromadb
+python-dotenv
+numpy==1.26.4
+

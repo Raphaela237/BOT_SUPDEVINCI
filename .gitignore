@@ -1,0 +1,17 @@
+# Clé API et infos sensibles
+.env
+
+# Dossiers de vecteurs Chroma
+supdevinci-chatbot/chroma_site/
+supdevinci-chatbot/chroma_reglement/
+
+# Cache & fichiers temporaires
+__pycache__/
+*.pyc
+*.pkl
+*.db
+
+# Environnement virtuel
+.venv/
+venv/
+env/
