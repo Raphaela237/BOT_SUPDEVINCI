@@ -17,10 +17,16 @@ web_vectorstore = Chroma(
     persist_directory="supdevinci-chatbot/chroma_site",
     embedding_function=HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 )
-
 web_retriever = web_vectorstore.as_retriever()
 
-# --- PROMPT 1 : DÉTECTION D'INTENTION ---
+# --- CHARGEMENT VECTORS DOC ---
+doc_vectorstore = Chroma(
+    persist_directory="supdevinci-chatbot/chroma_reglement",
+    embedding_function=HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+)
+doc_retriever = doc_vectorstore.as_retriever()
+
+# --- FONCTIONS D’AGENTS & ROUTEUR ---
 def detect_intention(user_input):
     prompt = f"""
 Tu joues le rôle d’un classificateur intelligent d’intention utilisateur.
@@ -40,8 +46,6 @@ Réponse attendue (web, doc, action, none) :
     response = gemini.generate_content(prompt)
     return response.text.strip().lower()
 
-
-# --- AGENT WEB ---
 def handle_web_agent(user_input):
     docs = web_retriever.get_relevant_documents(user_input)
     context = "\n\n".join([doc.page_content for doc in docs])
@@ -55,15 +59,6 @@ def handle_web_agent(user_input):
     response = gemini.generate_content(prompt)
     return response.text.strip()
 
-# --- CHARGEMENT VECTORS DOC ---
-doc_vectorstore = Chroma(
-    persist_directory="supdevinci-chatbot/chroma_reglement",
-    embedding_function=HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-)
-doc_retriever = doc_vectorstore.as_retriever()
-
-
-# --- AGENT DOC ---
 def handle_doc_agent(user_input):
     docs = doc_retriever.get_relevant_documents(user_input)
     context = "\n\n".join([doc.page_content for doc in docs])
@@ -77,8 +72,6 @@ def handle_doc_agent(user_input):
     response = gemini.generate_content(prompt)
     return response.text.strip()
 
-
-# --- AGENT ACTION ---
 def handle_action_agent(user_input):
     prompt = f"""
 Tu joues le rôle d’un assistant qui résume les informations clés d’une demande utilisateur.
@@ -118,26 +111,77 @@ Message utilisateur : "{user_input}"
 
     return f"Votre demande a bien été enregistrée.\n\nRésumé :\n{response}"
 
-
-# --- MODIFICATION ROUTEUR PRINCIPAL ---
 def main_router(user_input):
     intent = detect_intention(user_input)
     if intent == "web":
-        return handle_web_agent(user_input)
+        return handle_web_agent(user_input), intent
     elif intent == "doc":
-        return handle_doc_agent(user_input)
+        return handle_doc_agent(user_input), intent
     elif intent == "action":
-        return handle_action_agent(user_input)
+        return handle_action_agent(user_input), intent
     else:
-        return "Désolé, je n'ai pas compris votre demande. Pouvez-vous reformuler ?"
+        return "Désolé, je n'ai pas compris votre demande. Pouvez-vous reformuler ?", "none"
 
-# --- INTERFACE STREAMLIT ---
-st.set_page_config(page_title="Assistant SupdeVinci", page_icon="🤖")
+# --- EMOJIS POUR INTENTIONS ---
+EMOJI_INTENT = {
+    "web": "🌐",
+    "doc": "📄",
+    "action": "📝",
+    "none": "❓"
+}
+
+# --- STREAMLIT UI ---
+st.set_page_config(page_title="🤖 Assistant SupdeVinci")
 st.title("Assistant intelligent SupdeVinci")
 
-user_input = st.text_input("Posez votre question :")
-if user_input:
+# Initialisation historique conversation dans la session
+if "history" not in st.session_state:
+    st.session_state.history = []
+
+# Formulaire pour saisie + bouton "Envoyer" avec reset auto
+with st.form(key="input_form", clear_on_submit=True):
+    user_input = st.text_input("Posez votre question sur SupdeVinci...")
+    submit_button = st.form_submit_button("Envoyer")
+
+if submit_button and user_input:
     with st.spinner("Analyse en cours..."):
-        response = main_router(user_input)
-        st.markdown("### Réponse :")
-        st.write(response)
+        answer, intent = main_router(user_input)
+
+    # Ajouter à l'historique : question + réponse + intention
+    st.session_state.history.append({
+        "question": user_input,
+        "answer": answer,
+        "intent": intent
+    })
+
+# Affichage de l'historique sous forme de chat stylé
+for entry in reversed(st.session_state.history):
+    st.markdown(
+        f"""
+        <div style="
+            margin-bottom:15px;
+            padding:10px;
+            border-radius:8px;
+            background:#e6f0ff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        ">
+            <b>Vous :</b> {entry['question']}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    st.markdown(
+        f"""
+        <div style="
+            margin-bottom:30px;
+            padding:12px;
+            border-radius:8px;
+            background:#f0f4f8;
+            border: 1px solid #d1d9e6;
+            box-shadow: 1px 1px 3px rgba(0,0,0,0.05);
+        ">
+            <b>{EMOJI_INTENT.get(entry['intent'], '❓')} Assistant :</b> {entry['answer']}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
